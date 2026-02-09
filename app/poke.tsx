@@ -1,67 +1,111 @@
 'use client';
-import { useState, useEffect, use } from "react";
+import { useState, useEffect } from "react";
+import Link from "next/link";
+// Import UI Kit kita
+import Button from "./components/ui/Button";
+import Input from "./components/ui/Input";
+import Card from "./components/ui/Card";
 
-const getPoke = async (typeName: string) => {
-    const res = await fetch(`https://pokeapi.co/api/v2/type/${typeName}`);
-
-    if (!res.ok) {
-        throw new Error('Failed to fetch data');
-    };
-    return res.json();
+// ... (Logic fetchPokemon dan getIdFromUrl tetap sama) ...
+const fetchPokemon = async (type: string) => {
+    if (type === 'all') {
+        const res = await fetch('https://pokeapi.co/api/v2/pokemon?limit=1000');
+        const data = await res.json();
+        return data.results;
+    } else {
+        const res = await fetch(`https://pokeapi.co/api/v2/type/${type}`);
+        const data = await res.json();
+        return data.pokemon.map((p: any) => p.pokemon);
+    }
 };
 
+const getIdFromUrl = (url: string) => url.split('/').filter(Boolean).pop();
+
+
 export default function PokeList() {
-    const [selectedType, setSelectedType] = useState('normal');
-    const [pokemonList, setPokemonList] = useState<any[]>([]);
+    const [selectedType, setSelectedType] = useState('all');
+    const [allPokemon, setAllPokemon] = useState<any[]>([]);
+    const [filteredPokemon, setFilteredPokemon] = useState<any[]>([]);
+    const [searchQuery, setSearchQuery] = useState('');
     const [loading, setLoading] = useState(false);
 
-    const types = ['normal', 'fighting', 'flying', 'poison', 'ground', 'rock', 'bug', 'ghost', 'steel', 'fire', 'water', 'grass', 'electric', 'psychic', 'ice', 'dragon', 'dark', 'fairy', 'stellar'];
+    const types = ['all', 'normal', 'fire', 'water', 'grass', 'electric', 'ice', 'fighting', 'poison', 'ground', 'flying', 'psychic', 'bug', 'rock', 'ghost', 'dragon', 'steel', 'dark', 'fairy'];
 
     useEffect(() => {
         setLoading(true);
-        getPoke(selectedType)
+        setSearchQuery('');
+        fetchPokemon(selectedType)
             .then((data) => {
-                setPokemonList(data.pokemon);
+                setAllPokemon(data);
+                setFilteredPokemon(data);
                 setLoading(false);
-            })
-            .catch(() => setLoading(false));
+            });
     }, [selectedType]);
 
+    useEffect(() => {
+        if (!searchQuery) {
+            setFilteredPokemon(allPokemon);
+        } else {
+            setFilteredPokemon(allPokemon.filter(p => p.name.includes(searchQuery.toLowerCase())));
+        }
+    }, [searchQuery, allPokemon]);
+
     return (
-        <div className="space-y-4">
-            {/* Basic Buttons */}
-            <div className="flex flex-wrap gap-2">
-                {types.map((type) => (
-                    <button
-                        key={type}
-                        onClick={() => setSelectedType(type)}
-                        className={`px-4 py-2 border rounded capitalize ${
-                            selectedType === type 
-                            ? 'bg-black text-white' 
-                            : 'bg-gray-100 hover:bg-gray-200'
-                        }`}
-                    >
-                        {type}
-                    </button>
-                ))}
+        <div className="space-y-8">
+            
+            {/* Bagian Kontrol (Search & Filter) */}
+            <div className="space-y-6">
+                <Input 
+                    value={searchQuery} 
+                    onChange={setSearchQuery} 
+                    placeholder="Search your favorite Pokémon..."
+                />
+                
+                <div className="flex flex-wrap gap-2 justify-center">
+                    {types.map((type) => (
+                        <Button 
+                            key={type} 
+                            onClick={() => setSelectedType(type)}
+                            isActive={selectedType === type}
+                        >
+                            {type}
+                        </Button>
+                    ))}
+                </div>
             </div>
 
-            <hr className="my-4" />
+            {/* Bagian Grid */}
+            <div className="border-t pt-6">
+                <p className="mb-4 text-gray-500 font-medium">Found {filteredPokemon.length} results</p>
+                
+                {loading ? (
+                    <div className="text-center py-20 text-gray-400">Loading Pokedex data...</div>
+                ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-4">
+                        {filteredPokemon.map((entry) => {
+                            const pId = getIdFromUrl(entry.url);
+                            const imgUrl = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/${pId}.png`;
 
-            <h2 className="text-lg font-semibold capitalize">Type: {selectedType}</h2>
-
-            {/* Basic List */}
-            {loading ? (
-                <p>Loading...</p>
-            ) : (
-                <ul className="list-disc pl-5 space-y-1">
-                    {pokemonList.map((index) => (
-                        <li key={index.pokemon.name} className="capitalize">
-                            {index.pokemon.name}
-                        </li>
-                    ))}
-                </ul>
-            )}
+                            return (
+                                <Link href={`/pokemon/${entry.name}`} key={entry.name}>
+                                    {/* Component Abstraction: CARD */}
+                                    <Card>
+                                        <span className="text-xs text-gray-400 font-mono self-start">#{pId}</span>
+                                        <img 
+                                            src={imgUrl} 
+                                            alt={entry.name}
+                                            className="w-24 h-24 object-contain my-2"
+                                            loading="lazy"
+                                            onError={(e) => { e.currentTarget.src = `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${pId}.png` }}
+                                        />
+                                        <h3 className="font-bold text-gray-700 capitalize text-center">{entry.name}</h3>
+                                    </Card>
+                                </Link>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
